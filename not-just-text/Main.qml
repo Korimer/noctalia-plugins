@@ -32,25 +32,26 @@ Item {
     readonly property string _activePath: textFile.trim().length > 0 ? textFile.trim() : _examplesPath
 
     // =========================
-    // SOCKET TRIGGER
+    // SOCKET PATH
     // =========================
     property string socketPath: "/tmp/quickshell-refresh.sock"
 
     Component.onCompleted: {
-        if (fortuneEnabled) triggerFortune();
-        if (listEnabled) pickFromFile();
+        if (fortuneEnabled) triggerFortune()
+        if (listEnabled) pickFromFile()
     }
 
     // =========================
-    // debounce (shared refresh path)
+    // debounce
     // =========================
     Timer {
         id: debounce
         interval: 300
         repeat: false
+
         onTriggered: {
-            if (root.fortuneEnabled) triggerFortune();
-            if (root.listEnabled) pickFromFile();
+            if (root.fortuneEnabled) triggerFortune()
+            if (root.listEnabled) pickFromFile()
         }
     }
 
@@ -60,21 +61,22 @@ Item {
     Connections {
         target: WallpaperService
         function onWallpaperChanged(screenName, path) {
-            if (!root.refreshOnWallpaper) return;
-            if (root.fortuneEnabled || root.listEnabled) debounce.restart();
+            if (!root.refreshOnWallpaper) return
+            if (root.fortuneEnabled || root.listEnabled) debounce.restart()
         }
     }
 
     // =========================
-    // SOCKET LISTENER (socat)
+    // SOCKET LISTENER (FIXED FOR NIX)
     // =========================
     Process {
         id: socketListener
 
         command: [
-            "bash", "-c",
-            "rm -f " + root.socketPath + " && " +
-            "socat -u UNIX-LISTEN:" + root.socketPath + ",fork STDOUT"
+            "socat",
+            "-u",
+            "UNIX-LISTEN:" + root.socketPath + ",fork",
+            "STDOUT"
         ]
 
         running: true
@@ -107,39 +109,38 @@ Item {
         id: fortuneProcess
 
         command: {
-            var cmd = ["fortune", "-s"];
-            if (root.fortuneOffensive) cmd.push("-o");
-            if (root.fortuneEqual) cmd.push("-e");
+            var cmd = ["fortune", "-s"]
+            if (root.fortuneOffensive) cmd.push("-o")
+            if (root.fortuneEqual) cmd.push("-e")
             if (root.fortuneCategory.trim().length > 0)
-                cmd.push(root.fortuneCategory.trim());
-            return cmd;
+                cmd.push(root.fortuneCategory.trim())
+            return cmd
         }
 
         running: false
 
         stdout: StdioCollector {
             onStreamFinished: {
-                var lines = text.trim().split('\n').filter(l => l.trim().length > 0);
-                var valid = lines.length === 1 && lines[0].length <= root.fortuneMaxLength;
+                var lines = text.trim().split('\n').filter(l => l.trim().length > 0)
+                var valid = lines.length === 1 && lines[0].length <= root.fortuneMaxLength
 
                 if (valid) {
-                    root.fortuneText = lines[0].trim();
-                    root._retries = 0;
+                    root.fortuneText = lines[0].trim()
+                    root._retries = 0
                 } else if (root._retries < root._maxRetries) {
-                    root._retries++;
-                    root.triggerFortune();
+                    root._retries++
+                    root.triggerFortune()
                 } else {
-                    Logger.w("NotJustText", "fortune retries exceeded");
-                    root.fortuneText = root.pluginApi?.tr("fortune.gaveUp");
-                    root._retries = 0;
+                    root.fortuneText = root.pluginApi?.tr("fortune.gaveUp")
+                    root._retries = 0
                 }
             }
         }
     }
 
     function triggerFortune() {
-        fortuneProcess.running = false;
-        fortuneProcess.running = true;
+        fortuneProcess.running = false
+        fortuneProcess.running = true
     }
 
     // =========================
@@ -154,19 +155,19 @@ Item {
             onStreamFinished: {
                 var lines = text
                     .split('\n')
-                    .filter(l => l.trim().length > 0 && !l.trim().startsWith('# '));
+                    .filter(l => l.trim().length > 0 && !l.trim().startsWith('# '))
 
                 if (lines.length > 0) {
-                    root.listText = lines[Math.floor(Math.random() * lines.length)].trim();
+                    root.listText = lines[Math.floor(Math.random() * lines.length)].trim()
                 } else {
-                    root.listText = "";
+                    root.listText = ""
                 }
             }
         }
     }
 
     function pickFromFile() {
-        textFileProcess.running = false;
-        textFileProcess.running = true;
+        textFileProcess.running = false
+        textFileProcess.running = true
     }
 }
