@@ -6,15 +6,18 @@ import qs.Services.UI
 
 Item {
     id: root
+
     property var pluginApi: null
 
     property var cfg: pluginApi?.pluginSettings || ({})
     property var defaults: pluginApi?.manifest?.metadata?.defaultSettings || ({})
+
     readonly property bool fortuneEnabled: cfg.fortuneEnabled ?? defaults.fortuneEnabled ?? false
     readonly property bool fortuneOffensive: cfg.fortuneOffensive ?? defaults.fortuneOffensive ?? false
     readonly property bool fortuneEqual: cfg.fortuneEqual ?? defaults.fortuneEqual ?? false
     readonly property string fortuneCategory: cfg.fortuneCategory ?? defaults.fortuneCategory ?? ""
     readonly property int fortuneMaxLength: cfg.fortuneMaxLength ?? defaults.fortuneMaxLength ?? 60
+
     readonly property bool listEnabled: cfg.listEnabled ?? defaults.listEnabled ?? false
     readonly property string textFile: cfg.textFile ?? defaults.textFile ?? ""
     readonly property bool refreshOnWallpaper: cfg.refreshOnWallpaper ?? defaults.refreshOnWallpaper ?? true
@@ -24,39 +27,23 @@ Item {
     readonly property int _maxRetries: 10
 
     property string listText: ""
+
     readonly property string _examplesPath: Qt.resolvedUrl("examples.txt").toString().replace(/^file:\/\//, "")
     readonly property string _activePath: textFile.trim().length > 0 ? textFile.trim() : _examplesPath
+
+    // =========================
+    // SOCKET TRIGGER
+    // =========================
+    property string socketPath: "/tmp/quickshell-refresh.sock"
 
     Component.onCompleted: {
         if (fortuneEnabled) triggerFortune();
         if (listEnabled) pickFromFile();
     }
 
-    onFortuneEnabledChanged: {
-        if (fortuneEnabled) triggerFortune();
-    }
-
-    onFortuneOffensiveChanged: {
-        if (fortuneEnabled) triggerFortune();
-    }
-
-    onFortuneEqualChanged: {
-        if (fortuneEnabled) triggerFortune();
-    }
-
-    onFortuneCategoryChanged: {
-        if (fortuneEnabled) triggerFortune();
-    }
-
-    onListEnabledChanged: {
-        if (listEnabled) pickFromFile();
-    }
-
-    onTextFileChanged: {
-        if (listEnabled) pickFromFile();
-    }
-
-    // Debounce timer — wallpaperChanged fires once per screen, wait for all to settle
+    // =========================
+    // debounce (shared refresh path)
+    // =========================
     Timer {
         id: debounce
         interval: 300
@@ -67,6 +54,9 @@ Item {
         }
     }
 
+    // =========================
+    // wallpaper trigger
+    // =========================
     Connections {
         target: WallpaperService
         function onWallpaperChanged(screenName, path) {
@@ -75,20 +65,63 @@ Item {
         }
     }
 
+    // =========================
+    // SOCKET LISTENER (socat)
+    // =========================
+    Process {
+        id: socketListener
+
+        command: [
+            "bash", "-c",
+            "rm -f " + root.socketPath + " && " +
+            "socat -u UNIX-LISTEN:" + root.socketPath + ",fork STDOUT"
+        ]
+
+        running: true
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var msg = text.trim()
+
+                if (msg.length > 0) {
+                    if (root.fortuneEnabled || root.listEnabled) {
+                        debounce.restart()
+                    }
+                }
+            }
+        }
+
+        onExited: (code) => {
+            Logger.w("NotJustText", "socket listener exited:", code)
+
+            Qt.callLater(() => {
+                socketListener.running = true
+            })
+        }
+    }
+
+    // =========================
+    // fortune process
+    // =========================
     Process {
         id: fortuneProcess
+
         command: {
             var cmd = ["fortune", "-s"];
             if (root.fortuneOffensive) cmd.push("-o");
             if (root.fortuneEqual) cmd.push("-e");
-            if (root.fortuneCategory.trim().length > 0) cmd.push(root.fortuneCategory.trim());
+            if (root.fortuneCategory.trim().length > 0)
+                cmd.push(root.fortuneCategory.trim());
             return cmd;
         }
+
         running: false
+
         stdout: StdioCollector {
             onStreamFinished: {
                 var lines = text.trim().split('\n').filter(l => l.trim().length > 0);
                 var valid = lines.length === 1 && lines[0].length <= root.fortuneMaxLength;
+
                 if (valid) {
                     root.fortuneText = lines[0].trim();
                     root._retries = 0;
@@ -96,18 +129,10 @@ Item {
                     root._retries++;
                     root.triggerFortune();
                 } else {
-                    Logger.w("NotJustText", "Gave up after", root._maxRetries, "retries finding a short single-line fortune");
+                    Logger.w("NotJustText", "fortune retries exceeded");
                     root.fortuneText = root.pluginApi?.tr("fortune.gaveUp");
                     root._retries = 0;
                 }
-            }
-        }
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 127) {
-                Logger.e("NotJustText", "fortune is not installed — install it to use fortune mode");
-                root.fortuneText = root.pluginApi?.tr("fortune.notInstalled");
-            } else if (exitCode !== 0) {
-                Logger.w("NotJustText", "fortune exited with code", exitCode);
             }
         }
     }
@@ -117,24 +142,25 @@ Item {
         fortuneProcess.running = true;
     }
 
+    // =========================
+    // list file reader
+    // =========================
     Process {
         id: textFileProcess
         command: ["cat", root._activePath]
         running: false
+
         stdout: StdioCollector {
             onStreamFinished: {
-                var lines = text.split('\n').filter(l => l.trim().length > 0 && !l.trim().startsWith('# '));
+                var lines = text
+                    .split('\n')
+                    .filter(l => l.trim().length > 0 && !l.trim().startsWith('# '));
+
                 if (lines.length > 0) {
                     root.listText = lines[Math.floor(Math.random() * lines.length)].trim();
                 } else {
                     root.listText = "";
                 }
-            }
-        }
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode !== 0) {
-                Logger.w("NotJustText", "Could not read text file:", root._activePath);
-                root.listText = "";
             }
         }
     }
