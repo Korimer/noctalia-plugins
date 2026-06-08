@@ -2,8 +2,8 @@
   "version": 1,
   "plugins": [
     {
-      "id": "not-just-text",
-      "name": "Not Just Text",
+      "id": "kfortunes",
+      "name": "Kfortunes",
       "version": "1.0.1",
       "official": false,
       "author": "Korimer (forking blackteaextract)",
