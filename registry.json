@@ -6,9 +6,9 @@
       "name": "Not Just Text",
       "version": "1.0.1",
       "official": false,
-      "author": "blackteaextract",
+      "author": "Korimer (forking blackteaextract)",
       "description": "Displays custom text, fortune quotes, or a random entry from a user-provided text file in the bar.",
-      "repository": "https://github.com/noctalia-dev/noctalia-plugins",
+      "repository": "https://github.com/Korimer/noctalia-plugins",
       "minNoctaliaVersion": "4.4.1",
       "license": "MIT",
       "tags": [
